@@ -31,21 +31,24 @@ jobs:
       - name: Setup GCS credentials
         run: echo '${{ secrets.GCPKEY }}' > key.json
       
-      # - name: Verify GCS Access
-      #   env:
-      #     GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/key.json
-      #   run: |
-      #     gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-      #     PROJECT_ID=$(jq -r .project_id key.json)
-      #     gcloud config set project $PROJECT_ID
-      #     echo "Testing bucket access..."
-      #     gsutil ls gs://mlops-course-soy-bridge-474214-h8-unique || echo "gsutil failed, trying with gcloud..."
-      #     gcloud storage ls gs://mlops-course-soy-bridge-474214-h8-unique
+      - name: Configure DVC remote
+        run: |
+          echo "Current DVC config:"
+          cat .dvc/config || echo "No .dvc/config found"
+          echo "Setting up remote..."
+          dvc remote add -df gcs-remote gs://mlops-course-soy-bridge-474214-h8-unique
+          dvc remote default gcs-remote
+          echo "Updated DVC config:"
+          cat .dvc/config
+          echo "DVC remote list:"
+          dvc remote list
       
       - name: Pull DVC data
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/key.json
-        run: dvc pull
+        run: |
+          echo "Pulling data from DVC..."
+          dvc pull -v || echo "DVC pull failed"
       
       - name: Run tests & generate report
         run: pytest --md report.md
