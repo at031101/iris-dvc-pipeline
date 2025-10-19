@@ -1,0 +1,6 @@
+dvc[gcs]
+  pytest
+  joblib
+  scikit-learn
+  pandas
+  pytest-md
