@@ -26,8 +26,9 @@ jobs:
         run: |
           echo "${{ secrets.GCPKEY }}" > key.json
           export GOOGLE_APPLICATION_CREDENTIALS="${PWD}/key.json"
+          dvc remote add -d gcs-remote gs://${{ secrets.BUCKETNAME }}/path
           dvc remote modify gcs-remote credentialpath key.json
-          dvc remote modify gcs-remote endpointurl https://storage.googleapis.com
+          dvc remote modify gcs-remote endpointurl https://storage.googleapis.com      
       - name: Verify GCS Access
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS="${PWD}/key.json"
