@@ -1,19 +1,6 @@
 name: Model CI
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-on:
-  push:
-    branches:
-      - main
-      - dev
-      - master
-  pull_request:
-    branches:
-      - main
-      - dev
-      - master
+on: [push, pull_request]
+
 jobs:
   run-tests:
     runs-on: ubuntu-latest
@@ -24,84 +11,47 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: 3.11
       
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
       
       - name: Install CML
-        if: github.event_name == 'pull_request'
         run: npm install -g @dvcorg/cml
       
-      - name: Install Python dependencies and Google Cloud CLI
+      - name: Install Python dependencies & Google Cloud CLI
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
           sudo apt-get update
           sudo apt-get install -y google-cloud-cli
       
-      - name: Authenticate DVC with GCS
-        shell: bash
-        run: |
-          # Check if secret exists and is not empty
-          if [ -z "${{ secrets.GCPKEY }}" ]; then
-            echo "❌ ERROR: GCP_KEY secret is empty or not set"
-            exit 1
-          fi
-          
-          # Write credentials to file
-          echo '${{ secrets.GCPKEY }}' > key.json
-          echo "✅ GCP credentials written to key.json"
-          
-          # Validate JSON
-          if ! python3 -m json.tool key.json > /dev/null 2>&1; then
-            echo "❌ ERROR: Invalid JSON in GCP_KEY secret"
-            cat key.json
-            exit 1
-          fi
-          echo "✅ JSON is valid"
-          
-          # Set environment variable
-          export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/key.json
-          
-          # Configure DVC remote (check if it exists first)
-          if dvc remote list | grep -q "gcs-remote"; then
-            echo "✅ Remote 'gcs-remote' already exists"
-            dvc remote modify gcs-remote credentialpath key.json
-            dvc remote modify gcs-remote endpointurl https://storage.googleapis.com
-          else
-            echo "⚠️ Remote 'gcs-remote' not found, adding it..."
-            dvc remote add -d gcs-remote gs://week_2_dvc_iris_bucket
-            dvc remote modify gcs-remote credentialpath key.json
-            dvc remote modify gcs-remote endpointurl https://storage.googleapis.com
-          fi
+      - name: Setup GCS credentials
+        run: echo '${{ secrets.GCPKEY }}' > key.json
       
-      - name: Verify GCS Access
-        run: |
-          export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/key.json
-          gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
-          echo "✅ Authenticated accounts:"
-          gcloud auth list
-          echo "✅ Checking bucket access:"
-          gsutil ls gs://week_2_dvc_iris_bucket
+      # - name: Verify GCS Access
+      #   env:
+      #     GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/key.json
+      #   run: |
+      #     gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+      #     PROJECT_ID=$(jq -r .project_id key.json)
+      #     gcloud config set project $PROJECT_ID
+      #     echo "Testing bucket access..."
+      #     gsutil ls gs://mlops-course-soy-bridge-474214-h8-unique || echo "gsutil failed, trying with gcloud..."
+      #     gcloud storage ls gs://mlops-course-soy-bridge-474214-h8-unique
       
       - name: Pull DVC data
-        run: |
-          export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/key.json
-          echo "Pulling data from DVC remote..."
-          dvc pull -v
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/key.json
+        run: dvc pull
       
-      - name: Run tests and generate report
-        run: |
-          echo "Running tests..."
-          pytest --md report.md
+      - name: Run tests & generate report
+        run: pytest --md report.md
       
-      - name: Create CML report
+      - name: Create CML report (PRs only)
         if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cat report.md >> $GITHUB_STEP_SUMMARY
-          cml comment create report.md
+        run: cml comment create report.md
